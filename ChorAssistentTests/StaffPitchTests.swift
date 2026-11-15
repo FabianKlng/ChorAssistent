@@ -67,8 +67,8 @@ struct StaffPitchTests {
         for row in 30..<50 { profile[row] = 0.9 }  // dickes Band → verworfen
         let centers = StaffDetector.lineCenters(darkness: profile, minDarkness: 0.3)
         #expect(centers.count == 3)
-        #expect(centers[0] == 10.5)
-        #expect(centers[1] == 20)
+        #expect(abs(centers[0] - 10.5) < 0.001)
+        #expect(abs(centers[1] - 20) < 0.001)
         #expect(abs(centers[2] - 25.667) < 0.01)
     }
 
