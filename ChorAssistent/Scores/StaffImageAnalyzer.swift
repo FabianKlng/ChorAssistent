@@ -57,8 +57,9 @@ enum StaffImageAnalyzer {
 
         let exclusion = max(12, width / 50)
         let side = max(60, width / 8)
-        let columns = clampedRange(centerX - exclusion - side, centerX - exclusion, limit: width)
-            + clampedRange(centerX + exclusion, centerX + exclusion + side, limit: width)
+        let leftColumns = clampedRange(centerX - exclusion - side, centerX - exclusion, limit: width)
+        let rightColumns = clampedRange(centerX + exclusion, centerX + exclusion + side, limit: width)
+        let columns = leftColumns + rightColumns
         guard columns.count >= 20 else { return nil }
 
         let reach = max(150, height / 10)
