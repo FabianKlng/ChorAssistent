@@ -43,8 +43,9 @@ enum BackupService {
     static func makeFile(context: ModelContext, defaults: UserDefaults = .standard, now: Date = .now) throws
         -> BackupFile
     {
-        let songs = try context.fetch(FetchDescriptor<Song>(sortBy: [SortDescriptor(\.title)]))
-        let concerts = try context.fetch(FetchDescriptor<Concert>(sortBy: [SortDescriptor(\.createdAt)]))
+        // Im Speicher sortiert: SortDescriptor mit KeyPath ist unter strenger Nebenläufigkeit nicht Sendable.
+        let songs = try context.fetch(FetchDescriptor<Song>()).sorted { $0.title < $1.title }
+        let concerts = try context.fetch(FetchDescriptor<Concert>()).sorted { $0.createdAt < $1.createdAt }
         return BackupFile(
             formatVersion: BackupFile.currentVersion,
             exportedAt: now,
@@ -157,8 +158,13 @@ enum BackupService {
 
             var songsByID: [UUID: Song] = [:]
             for dto in file.songs {
-                let song = Song(id: dto.id, title: dto.title, memo: dto.memo, pitches: dto.pitches,
-                    createdAt: dto.createdAt)
+                let song = Song(
+                    id: dto.id,
+                    title: dto.title,
+                    memo: dto.memo,
+                    pitches: dto.pitches,
+                    createdAt: dto.createdAt
+                )
                 context.insert(song)
                 songsByID[dto.id] = song
             }

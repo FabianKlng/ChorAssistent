@@ -122,8 +122,11 @@ struct BackupServiceTests {
         let defaults = makeTestDefaults()
         defaults.set(2.0, forKey: PlaybackSettings.toneDurationKey)
         defaults.set(0.5, forKey: PlaybackSettings.gapKey)
-        try BackupService.replaceLibrary(with: makeFile(songs: [song("A", [60])]), context: store.context,
-            defaults: defaults)
+        try BackupService.replaceLibrary(
+            with: makeFile(songs: [song("A", [60])]),
+            context: store.context,
+            defaults: defaults
+        )
         #expect(PlaybackSettings.toneDuration(defaults) == 2.0)
         #expect(PlaybackSettings.gap(defaults) == 0.5)
     }
@@ -154,12 +157,64 @@ struct BackupServiceTests {
 
     // MARK: Hilfen
 
+    private static let fixedDate = Date(timeIntervalSince1970: 1_700_000_000)
+
     private func song(_ title: String, _ pitches: [Int]) -> SongDTO {
-        SongDTO(id: UUID(), title: title, memo: "", pitches: pitches, createdAt: Date(timeIntervalSince1970: 1_700_000_000))
+        SongDTO(id: UUID(), title: title, memo: "", pitches: pitches, createdAt: Self.fixedDate)
     }
 
     private func makeFile(songs: [SongDTO], concerts: [ConcertDTO] = []) -> BackupFile {
-        BackupFile(formatVersion: BackupFile.currentVersion, exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            settings: nil, songs: songs, concerts: concerts)
+        BackupFile(
+            formatVersion: BackupFile.currentVersion,
+            exportedAt: Self.fixedDate,
+            settings: nil,
+            songs: songs,
+            concerts: concerts
+        )
+    }
+
+    // MARK: Export, Laden, Fehlermeldungen
+
+    @Test func writeExportCreatesNamedJSONFile() throws {
+        let store = try TestStore()
+        try makeLibrary(store)
+        let url = try BackupService.writeExport(context: store.context)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        #expect(url.lastPathComponent.hasPrefix("ChorAssistent-Sicherung-"))
+        #expect(url.pathExtension == "json")
+        let file = try BackupService.decodeAndValidate(Data(contentsOf: url))
+        #expect(file.songs.map(\.title) == ["Abendlied", "Bona nox"])
+    }
+
+    @Test func loadValidFile() throws {
+        let url = temporaryFileURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let file = makeFile(songs: [song("A", [60])])
+        try BackupService.encode(file).write(to: url)
+
+        #expect(try BackupService.load(from: url).songs.map(\.title) == ["A"])
+    }
+
+    @Test func loadMissingFileIsUnreadable() {
+        #expect(throws: BackupError.unreadable) { try BackupService.load(from: temporaryFileURL()) }
+    }
+
+    @Test func undoWithoutSafetyBackupIsUnreadable() throws {
+        let store = try TestStore()
+        #expect(throws: BackupError.unreadable) {
+            try BackupService.undoLastImport(context: store.context, safetyURL: temporaryFileURL())
+        }
+    }
+
+    @Test func everyErrorHasAGermanMessage() {
+        let errors: [BackupError] = [
+            .tooLarge, .unreadable, .unknownVersion(3), .invalidSong(title: "X", reason: .noPitches),
+            .duplicateID, .unknownSongID, .saveFailed,
+        ]
+        for error in errors {
+            #expect(!(error.errorDescription ?? "").isEmpty)
+        }
+        #expect(BackupError.unknownVersion(3).errorDescription == "Unbekannte Dateiversion 3")
     }
 }
