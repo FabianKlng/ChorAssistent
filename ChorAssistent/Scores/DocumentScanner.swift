@@ -21,6 +21,9 @@ struct DocumentScanner: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: VNDocumentCameraViewController, context: Context) {}
 
+    /// MainActor-isoliert, damit `self` sicher in den MainActor-Kontext wechseln kann.
+    /// Die Delegate-Methoden sind `nonisolated`; der Scanner ruft sie auf dem Main-Thread auf.
+    @MainActor
     final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
         private let onFinish: @MainActor ([UIImage]) -> Void
         private let onCancel: @MainActor () -> Void
@@ -30,24 +33,24 @@ struct DocumentScanner: UIViewControllerRepresentable {
             self.onCancel = onCancel
         }
 
-        func documentCameraViewController(
+        nonisolated func documentCameraViewController(
             _ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan
         ) {
-            // Der Scanner ruft seine Delegate-Methoden auf dem Main-Thread auf.
+            // Bilder vor dem Wechsel herauslösen: UIImage ist Sendable, der Scan nicht.
+            let images = (0..<scan.pageCount).map { scan.imageOfPage(at: $0) }
             MainActor.assumeIsolated {
-                let images = (0..<scan.pageCount).map { scan.imageOfPage(at: $0) }
-                onFinish(images)
+                self.onFinish(images)
             }
         }
 
-        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            MainActor.assumeIsolated { onCancel() }
+        nonisolated func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+            MainActor.assumeIsolated { self.onCancel() }
         }
 
-        func documentCameraViewController(
+        nonisolated func documentCameraViewController(
             _ controller: VNDocumentCameraViewController, didFailWithError error: Error
         ) {
-            MainActor.assumeIsolated { onCancel() }
+            MainActor.assumeIsolated { self.onCancel() }
         }
     }
 }
