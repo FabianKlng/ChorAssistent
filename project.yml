@@ -1,0 +1,62 @@
+# XcodeGen-Beschreibung des Projekts. Erzeugen mit: xcodegen generate
+# Das .xcodeproj wird nicht eingecheckt.
+name: ChorAssistent
+
+options:
+  bundleIdPrefix: local.chorassistent
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  ChorAssistent:
+    type: application
+    platform: iOS
+    sources:
+      - path: ChorAssistent
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.chorassistent.ChorAssistent
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: ChorAssistent
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        ENABLE_PREVIEWS: YES
+
+  ChorAssistentTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ChorAssistentTests
+    dependencies:
+      - target: ChorAssistent
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.chorassistent.ChorAssistentTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ChorAssistent.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ChorAssistent"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  ChorAssistent:
+    build:
+      targets:
+        ChorAssistent: all
+        ChorAssistentTests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - ChorAssistentTests
+    archive:
+      config: Release

@@ -1,0 +1,17 @@
+# Von XcodeGen erzeugt
+*.xcodeproj/
+*.xcworkspace/
+
+# Build-Ausgaben
+build/
+DerivedData/
+*.ipa
+*.xcresult
+
+# System
+.DS_Store
+Thumbs.db
+
+# Lokale Arbeitsdateien (nicht veröffentlichen)
+review_context/
+design_draft.md
