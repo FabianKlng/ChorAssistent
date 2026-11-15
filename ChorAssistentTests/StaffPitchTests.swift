@@ -148,9 +148,13 @@ struct StaffPitchTests {
             cg.strokePath()
             // Notenköpfe mit Hälsen
             UIColor(white: 0.1, alpha: 1).setFill()
-            for (x, y) in [(400.0, realisticLineY(index: 3, x: 400)), (700.0, realisticLineY(index: 2, x: 700)),
-                (1000.0, (realisticLineY(index: 0, x: 1000) + realisticLineY(index: 1, x: 1000)) / 2)]
-            {
+            let topSpace = (realisticLineY(index: 0, x: 1000) + realisticLineY(index: 1, x: 1000)) / 2
+            let notes: [(Double, Double)] = [
+                (400, realisticLineY(index: 3, x: 400)),
+                (700, realisticLineY(index: 2, x: 700)),
+                (1000, topSpace),
+            ]
+            for (x, y) in notes {
                 cg.fillEllipse(in: CGRect(x: x - 8, y: y - 6, width: 16, height: 12))
                 cg.fill(CGRect(x: x + 6, y: y - 40, width: 1.5, height: 40))
             }
