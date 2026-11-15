@@ -43,10 +43,17 @@ struct StaffDetection: Equatable, Sendable {
 }
 
 /// Findet die Notenlinien rund um einen Tipp.
-/// Gemessen wird links und rechts der Tipp-Stelle, damit der Notenkopf selbst nicht als Linie zählt.
+///
+/// Gemessen wird in vier schmalen senkrechten Streifen links und rechts der Tipp-Stelle
+/// (der Notenkopf selbst zählt nicht mit). Schmale Streifen halten schiefe Scans aus:
+/// Eine um 2° geneigte Linie wandert über 30 px nur um gut 1 px.
+/// Pro Zeile wird die mittlere Dunkelheit bestimmt – relativ zu Papier- und Tintenton
+/// des Ausschnitts, damit auch dünne, graue Linien aus JPEG-Scans zählen.
 enum StaffImageAnalyzer {
-    static let darkThreshold: UInt8 = 150
-    static let minLineRatio = 0.45
+    /// Mindest-Dunkelheit (0…1) einer Linie im Zeilenprofil.
+    static let minLineDarkness = 0.35
+    /// Mindestabstand zwischen Papier- und Tintenton, sonst ist der Ausschnitt leer.
+    static let minContrast = 40.0
 
     static func detect(in image: GrayImage, x: Double, y: Double) -> StaffDetection? {
         let width = image.width
@@ -55,38 +62,103 @@ enum StaffImageAnalyzer {
         let centerY = Int(y)
         guard (0..<width).contains(centerX), (0..<height).contains(centerY) else { return nil }
 
-        let exclusion = max(12, width / 50)
-        let side = max(60, width / 8)
-        let leftColumns = clampedRange(centerX - exclusion - side, centerX - exclusion, limit: width)
-        let rightColumns = clampedRange(centerX + exclusion, centerX + exclusion + side, limit: width)
-        let columns = leftColumns + rightColumns
-        guard columns.count >= 20 else { return nil }
+        let stripWidth = max(24, width / 60)
+        let exclusion = max(10, width / 80)
+        let reach = max(120, height / 12)
+        let rows = max(0, centerY - reach)...min(height - 1, centerY + reach)
 
-        let reach = max(150, height / 10)
-        let top = max(0, centerY - reach)
-        let bottom = min(height - 1, centerY + reach)
-
-        var darkness: [Double] = []
-        darkness.reserveCapacity(bottom - top + 1)
-        for row in top...bottom {
-            let base = row * width
-            var dark = 0
-            for column in columns where image.pixels[base + column] < darkThreshold {
-                dark += 1
-            }
-            darkness.append(Double(dark) / Double(columns.count))
+        let strips = [
+            centerX - exclusion - stripWidth,
+            centerX + exclusion,
+            centerX - exclusion - 3 * stripWidth,
+            centerX + exclusion + 2 * stripWidth,
+        ].compactMap { start -> Range<Int>? in
+            let low = max(0, start)
+            let high = min(width, start + stripWidth)
+            return high - low >= stripWidth / 2 ? low..<high : nil
         }
+        guard !strips.isEmpty, let levels = inkAndPaper(in: image, rows: rows, strips: strips) else { return nil }
 
-        let lines = StaffDetector.lineCenters(rowDarkness: darkness, minRatio: minLineRatio)
-            .map { $0 + Double(top) }
-        guard let staff = StaffDetector.staff(in: lines, near: y) else { return nil }
+        var candidates: [Candidate] = []
+        for strip in strips {
+            let profile = darknessProfile(in: image, rows: rows, columns: strip, levels: levels)
+            let lines = StaffDetector.lineCenters(
+                darkness: profile, minDarkness: minLineDarkness, maxThickness: max(5, height / 400)
+            )
+            .map { $0 + Double(rows.lowerBound) }
+            guard let staff = StaffDetector.staff(in: lines, near: y) else { continue }
+            candidates.append(Candidate(staff: staff, distance: StaffDetector.distance(from: y, to: staff)))
+        }
+        guard let staff = vote(candidates)?.staff else { return nil }
         return StaffDetection(lines: staff, step: StaffPitch.step(forY: y, staff: staff), x: x, y: y)
     }
 
-    private static func clampedRange(_ lower: Int, _ upper: Int, limit: Int) -> [Int] {
-        let low = max(0, lower)
-        let high = min(limit, upper)
-        guard low < high else { return [] }
-        return Array(low..<high)
+    private struct Candidate {
+        let staff: [Double]
+        let distance: Double
+    }
+
+    /// Das System, das die meisten Streifen übereinstimmend finden; bei Gleichstand das nächste.
+    /// Eine Hilfslinie einer Nachbarnote verschiebt das System höchstens in einem Streifen.
+    private static func vote(_ candidates: [Candidate]) -> Candidate? {
+        func agree(_ a: [Double], _ b: [Double]) -> Bool {
+            let tolerance = max(2, (a[4] - a[0]) / 8)
+            return zip(a, b).allSatisfy { abs($0 - $1) <= tolerance }
+        }
+        let scored = candidates.map { candidate in
+            (candidate, candidates.filter { agree($0.staff, candidate.staff) }.count)
+        }
+        return scored.max { lhs, rhs in
+            lhs.1 != rhs.1 ? lhs.1 < rhs.1 : lhs.0.distance > rhs.0.distance
+        }?.0
+    }
+
+    /// Tintenton (1 %-Quantil) und Papierton (90 %-Quantil) im Ausschnitt.
+    /// Dünne Notenlinien belegen in einem Streifen nur wenige Prozent der Pixel.
+    private static func inkAndPaper(in image: GrayImage, rows: ClosedRange<Int>, strips: [Range<Int>])
+        -> (ink: Double, paper: Double)?
+    {
+        var histogram = [Int](repeating: 0, count: 256)
+        var total = 0
+        for row in rows {
+            let base = row * image.width
+            for strip in strips {
+                for column in strip {
+                    histogram[Int(image.pixels[base + column])] += 1
+                    total += 1
+                }
+            }
+        }
+        guard total > 0 else { return nil }
+        let ink = Double(quantile(histogram, total: total, fraction: 0.01))
+        let paper = Double(quantile(histogram, total: total, fraction: 0.90))
+        guard paper - ink >= minContrast else { return nil }
+        return (ink, paper)
+    }
+
+    private static func quantile(_ histogram: [Int], total: Int, fraction: Double) -> Int {
+        let target = Int(Double(total) * fraction)
+        var sum = 0
+        for (value, count) in histogram.enumerated() {
+            sum += count
+            if sum > target { return value }
+        }
+        return 255
+    }
+
+    /// Mittlere Dunkelheit pro Zeile (0 = Papier, 1 = Tinte).
+    private static func darknessProfile(
+        in image: GrayImage, rows: ClosedRange<Int>, columns: Range<Int>, levels: (ink: Double, paper: Double)
+    ) -> [Double] {
+        let range = levels.paper - levels.ink
+        return rows.map { row in
+            let base = row * image.width
+            var sum = 0.0
+            for column in columns {
+                let value = Double(image.pixels[base + column])
+                sum += min(1, max(0, (levels.paper - value) / range))
+            }
+            return sum / Double(columns.count)
+        }
     }
 }

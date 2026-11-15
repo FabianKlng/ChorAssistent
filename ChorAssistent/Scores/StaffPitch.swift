@@ -85,28 +85,43 @@ enum StaffPitch {
 
 /// Findet Notenlinien in einem Profil aus Zeilen-Dunkelwerten.
 enum StaffDetector {
-    /// Mittelpunkte zusammenhängender dunkler Zeilen.
-    /// Sehr dicke Bänder (z. B. Balken, Flächen) werden verworfen.
-    static func lineCenters(rowDarkness: [Double], minRatio: Double, maxThickness: Int = 12) -> [Double] {
+    /// Mittelpunkte zusammenhängender dunkler Zeilen, als Schwerpunkt der Dunkelheit.
+    /// Sehr dicke Bänder (z. B. Balken, Notenköpfe, Flächen) werden verworfen.
+    static func lineCenters(darkness: [Double], minDarkness: Double, maxThickness: Int = 12) -> [Double] {
         var centers: [Double] = []
         var runStart: Int?
-        for (row, ratio) in rowDarkness.enumerated() {
-            if ratio >= minRatio {
+        for (row, value) in darkness.enumerated() {
+            if value >= minDarkness {
                 if runStart == nil { runStart = row }
             } else if let start = runStart {
-                appendRun(start: start, end: row - 1, maxThickness: maxThickness, to: &centers)
+                appendRun(darkness, start: start, end: row - 1, maxThickness: maxThickness, to: &centers)
                 runStart = nil
             }
         }
         if let start = runStart {
-            appendRun(start: start, end: rowDarkness.count - 1, maxThickness: maxThickness, to: &centers)
+            appendRun(darkness, start: start, end: darkness.count - 1, maxThickness: maxThickness, to: &centers)
         }
         return centers
     }
 
-    private static func appendRun(start: Int, end: Int, maxThickness: Int, to centers: inout [Double]) {
+    private static func appendRun(
+        _ darkness: [Double], start: Int, end: Int, maxThickness: Int, to centers: inout [Double]
+    ) {
         guard end - start + 1 <= maxThickness else { return }
-        centers.append(Double(start + end) / 2)
+        var weight = 0.0
+        var weighted = 0.0
+        for row in start...end {
+            weight += darkness[row]
+            weighted += darkness[row] * Double(row)
+        }
+        centers.append(weight > 0 ? weighted / weight : Double(start + end) / 2)
+    }
+
+    /// Abstand einer Stelle zum Notensystem; 0, wenn sie zwischen oberster und unterster Linie liegt.
+    static func distance(from y: Double, to staff: [Double]) -> Double {
+        if y < staff[0] { return staff[0] - y }
+        if y > staff[staff.count - 1] { return y - staff[staff.count - 1] }
+        return 0
     }
 
     /// Das Notensystem (fünf gleichmäßig verteilte Linien), das der Stelle `y` am nächsten liegt.
@@ -123,17 +138,10 @@ enum StaffDetector {
                 largest / smallest <= maxGapRatio
             else { continue }
             let spacing = (group[4] - group[0]) / 4
-            let distance: Double
-            if y < group[0] {
-                distance = group[0] - y
-            } else if y > group[4] {
-                distance = y - group[4]
-            } else {
-                distance = 0
-            }
-            guard distance <= spacing * 6 else { continue }
-            if best == nil || distance < best!.distance {
-                best = (group, distance)
+            let gap = Self.distance(from: y, to: group)
+            guard gap <= spacing * 6 else { continue }
+            if best == nil || gap < best!.distance {
+                best = (group, gap)
             }
         }
         return best?.staff

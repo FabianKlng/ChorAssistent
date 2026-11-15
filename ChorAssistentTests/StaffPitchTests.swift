@@ -57,13 +57,19 @@ struct StaffPitchTests {
 
     // MARK: Linien finden
 
-    @Test func lineCentersMergeRunsAndSkipThickBands() {
+    @Test func lineCentersUseCentroidAndSkipThickBands() {
         var profile = [Double](repeating: 0, count: 60)
         profile[10] = 0.9
         profile[11] = 0.9  // Linie bei 10,5
         profile[20] = 0.6  // Linie bei 20
+        profile[25] = 0.3
+        profile[26] = 0.6  // ungleich verteilt → Schwerpunkt 25,67
         for row in 30..<50 { profile[row] = 0.9 }  // dickes Band → verworfen
-        #expect(StaffDetector.lineCenters(rowDarkness: profile, minRatio: 0.45) == [10.5, 20])
+        let centers = StaffDetector.lineCenters(darkness: profile, minDarkness: 0.3)
+        #expect(centers.count == 3)
+        #expect(centers[0] == 10.5)
+        #expect(centers[1] == 20)
+        #expect(abs(centers[2] - 25.667) < 0.01)
     }
 
     @Test func staffPicksEvenlySpacedGroupNearestToTap() {
@@ -104,6 +110,57 @@ struct StaffPitchTests {
         #expect(StaffImageAnalyzer.detect(in: gray, x: 600, y: 250) == nil)
     }
 
+    @Test func detectsNoteOnRealisticScan() throws {
+        // Dünne graue Linien (1 px), 1,5° schief, Abstand 12 px, Notenhälse, JPEG-komprimiert.
+        let gray = try #require(makeRealisticScan())
+        // Notenkopf auf der mittleren Linie (Schritt 4) bei x = 700
+        let lineY = realisticLineY(index: 2, x: 700)
+        let detection = try #require(StaffImageAnalyzer.detect(in: gray, x: 700, y: lineY))
+        #expect(detection.step == 4)
+        #expect(abs(detection.spacing - 12) < 1.5)
+        // Notenkopf im obersten Zwischenraum (Schritt 7) bei x = 1000
+        let spaceY = (realisticLineY(index: 0, x: 1000) + realisticLineY(index: 1, x: 1000)) / 2
+        #expect(StaffImageAnalyzer.detect(in: gray, x: 1000, y: spaceY)?.step == 7)
+    }
+
+    private static let realisticTilt = tan(1.5 * Double.pi / 180)
+
+    /// y der Linie `index` (0 = oberste) im schiefen Testbild an Stelle x.
+    private func realisticLineY(index: Int, x: Double) -> Double {
+        600 + Double(index) * 12 + x * Self.realisticTilt
+    }
+
+    private func makeRealisticScan() -> GrayImage? {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let size = CGSize(width: 1414, height: 2000)
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            let cg = context.cgContext
+            UIColor(white: 0.93, alpha: 1).setFill()
+            cg.fill(CGRect(origin: .zero, size: size))
+            // Notenlinien: grau, 1 px, schief
+            UIColor(white: 0.45, alpha: 1).setStroke()
+            cg.setLineWidth(1)
+            for index in 0..<5 {
+                cg.move(to: CGPoint(x: 80, y: realisticLineY(index: index, x: 80)))
+                cg.addLine(to: CGPoint(x: 1334, y: realisticLineY(index: index, x: 1334)))
+            }
+            cg.strokePath()
+            // Notenköpfe mit Hälsen
+            UIColor(white: 0.1, alpha: 1).setFill()
+            for (x, y) in [(400.0, realisticLineY(index: 3, x: 400)), (700.0, realisticLineY(index: 2, x: 700)),
+                (1000.0, (realisticLineY(index: 0, x: 1000) + realisticLineY(index: 1, x: 1000)) / 2)]
+            {
+                cg.fillEllipse(in: CGRect(x: x - 8, y: y - 6, width: 16, height: 12))
+                cg.fill(CGRect(x: x + 6, y: y - 40, width: 1.5, height: 40))
+            }
+        }
+        guard let jpeg = ImageCompressor.jpegData(from: image), let decoded = UIImage(data: jpeg),
+            let cgImage = decoded.cgImage
+        else { return nil }
+        return GrayImage(cgImage: cgImage)
+    }
+
     /// Weißes Bild 1200×600 mit Notensystem (Linien bei y = 200…280, Abstand 20) und optionalem Notenkopf.
     private func makeStaffImage(noteCenter: CGPoint?, drawStaff: Bool = true) -> GrayImage? {
         let format = UIGraphicsImageRendererFormat.default()
@@ -124,7 +181,7 @@ struct StaffPitchTests {
                     in: CGRect(x: noteCenter.x - 13, y: noteCenter.y - 9, width: 26, height: 18))
                 // Hilfslinie für Noten unterhalb des Systems
                 if noteCenter.y >= 300 {
-                    context.fill(CGRect(x: noteCenter.x - 22, y: 299, width: 44, height: 2))
+                    context.fill(CGRect(x: noteCenter.x - 15, y: 299, width: 30, height: 2))
                 }
             }
         }
