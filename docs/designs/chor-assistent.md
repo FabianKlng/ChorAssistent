@@ -85,6 +85,14 @@ Töne abspielen.
     werden beim Lied gespeichert, auf der Detailseite als Vorschaubilder
     gezeigt und lassen sich im Vollbild mit Zoom ansehen. Sie gehören zur
     Sicherung (G7).
+*   **G12 – Töne im Scan antippen (ergänzt am 2026-11-15):**
+    *   Man tippt im Scan auf den Notenkopf einer Stimme. Die App findet das
+        Notensystem um die Tipp-Stelle selbst und berechnet den Ton aus
+        Position, Schlüssel und Vorzeichen.
+    *   Schlüssel: Violin, Violin oktaviert, Bass. Vorzeichen: 7 ♭ bis 7 ♯.
+    *   Versetzungszeichen, die nur im Takt gelten, korrigiert man mit
+        ±½. Der Ton wird zur Kontrolle angespielt.
+    *   Offline und kostenlos.
 *   **G11 – Gestaltung „warm & klassisch“ (ergänzt am 2026-11-15):**
     *   Cremefarbener Papierhintergrund, Bordeaux und Gold, Titel in
         Serifenschrift, eigener Dunkelmodus.
@@ -108,10 +116,10 @@ Töne abspielen.
 *   **Keine Mehrbenutzer-Funktion, kein Server, keine iCloud-Synchronisierung.**
     Sänger*innen haben keinen Zugriff auf die Daten.
 *   **Keine Android-, Web- oder Mac-Version.**
-*   **Keine automatische Notenerkennung** (entschieden am 2026-11-15). Die
-    App liest keine Töne aus gescannten Noten. Auf dem Gerät gibt es dafür
-    keine brauchbare Lösung, und ein Cloud-Dienst wurde abgelehnt. Die
-    Anfangstöne werden immer von Hand eingegeben.
+*   **Keine vollautomatische Notenerkennung** (entschieden am 2026-11-15).
+    Auf dem Gerät gibt es dafür keine brauchbare Lösung, und ein
+    Cloud-Dienst wurde abgelehnt. Stattdessen gibt es eine halbautomatische
+    Erkennung durch Antippen (G12).
 *   **Keine Liedtexte, PDF-Importe oder Noten im Konzertmodus.** Gescannte
     Noten sieht man auf der Lied-Detailseite, nicht auf der Bühne.
 *   **Kein Stimmgerät.** Die App hört nicht zu und misst nicht, ob der Chor
@@ -525,6 +533,18 @@ Import rückgängig machen".
     *   Dateien im Format 1 bleiben lesbar.
     *   Die Importgrenze steigt von 5 MB auf 200 MB.
     *   Ohne die Scans wäre eine Sicherung bei Geräteverlust unvollständig.
+*   **Töne antippen:** Die Rechenlogik (`StaffPitch`, `StaffDetector`)
+    ist vom Bildteil (`StaffImageAnalyzer`) getrennt und deshalb testbar.
+    *   Die Linien werden über ein Zeilenprofil dunkler Pixel gesucht. Gezählt
+        werden nur Spalten links und rechts der Tipp-Stelle; der Notenkopf
+        selbst zählt nicht mit.
+    *   Als Notensystem gelten fünf gleichmäßig verteilte Linien. Gewählt
+        wird das System, das der Tipp-Stelle am nächsten liegt; Hilfslinien
+        bis sechs Linienabstände darüber oder darunter sind erlaubt.
+    *   Der Abstand zur untersten Linie in halben Linienabständen ergibt
+        die Stufe. Daraus berechnet die App mit Schlüssel und Vorzeichen
+        den MIDI-Wert.
+    *   Tests prüfen das mit gezeichneten Notenbildern.
 *   **App-Symbol:** Bordeaux mit goldenen Notenlinien und einer
     cremefarbenen Achtelnote. Es liegt in
     `ChorAssistent/Assets.xcassets/AppIcon.appiconset`.

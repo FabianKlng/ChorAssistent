@@ -4,6 +4,9 @@ iOS-App für eine Person, die im Chor die Anfangstöne angibt.
 
 *   **Lieder:** Sie werden mit ihren Anfangstönen und gescannten Noten
     gespeichert.
+*   **Töne aus dem Scan:** Ein Tipp auf den Notenkopf genügt. Die App
+    erkennt die Notenlinien und berechnet den Ton aus Schlüssel und
+    Vorzeichen.
 *   **Abspielen:** Ein Tipp spielt die Töne nacheinander mit Klavierklang
     ab, auch bei eingeschaltetem Stummschalter.
 *   **Startseite:** Sie zeigt das nächste Konzert.

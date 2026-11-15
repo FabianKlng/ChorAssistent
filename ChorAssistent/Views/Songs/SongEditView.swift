@@ -23,6 +23,8 @@ struct SongEditView: View {
     @State private var draft: SongDraft
     @State private var pickerTarget: PickerTarget?
     @State private var showScanner = false
+    @State private var showPitchTap = false
+    @State private var tappedPitches: [Int]?
     @State private var errorMessage: String?
 
     static let memoLimit = 200
@@ -40,6 +42,11 @@ struct SongEditView: View {
 
     private var keptPages: [ScorePage] {
         (song?.sortedScorePages ?? []).filter { !draft.removedPageIDs.contains($0.id) }
+    }
+
+    /// Alle Seiten, die nach dem Sichern zum Lied gehören (bestehende und neu gescannte).
+    private var allPageData: [Data] {
+        keptPages.map(\.imageData) + draft.newScans
     }
 
     var body: some View {
@@ -90,6 +97,24 @@ struct SongEditView: View {
                 onCancel: { showScanner = false }
             )
             .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showPitchTap) {
+            PitchTapView(pages: allPageData, maxCount: Song.maxPitches) { pitches in
+                receiveTapped(pitches)
+            }
+        }
+        .confirmationDialog(
+            "Erkannte Töne übernehmen",
+            isPresented: Binding(get: { tappedPitches != nil }, set: { if !$0 { tappedPitches = nil } }),
+            titleVisibility: .visible,
+            presenting: tappedPitches
+        ) { pitches in
+            Button("Bisherige Töne ersetzen") { draft.pitches = Array(pitches.prefix(Song.maxPitches)) }
+            Button("Hinten anhängen") {
+                draft.pitches = Array((draft.pitches + pitches).prefix(Song.maxPitches))
+            }
+        } message: { pitches in
+            Text("\(NoteName.names(pitches)) – das Lied hat schon \(draft.pitches.count) Töne.")
         }
         .alert(
             "Fehler",
@@ -167,6 +192,13 @@ struct SongEditView: View {
                     .padding(.vertical, 6)
                 }
             }
+            if !allPageData.isEmpty {
+                Button {
+                    showPitchTap = true
+                } label: {
+                    Label("Töne im Scan antippen", systemImage: "hand.tap")
+                }
+            }
             if DocumentScanner.isAvailable {
                 Button {
                     showScanner = true
@@ -181,7 +213,10 @@ struct SongEditView: View {
         } header: {
             Text("Noten")
         } footer: {
-            Text("Neue Seiten kommen ans Ende. Gespeichert wird erst mit „Sichern“.")
+            Text(
+                "Neue Seiten kommen ans Ende. Mit „Töne im Scan antippen“ übernimmst du "
+                    + "Anfangstöne direkt aus den Noten."
+            )
         }
         .listRowBackground(Theme.card)
     }
@@ -203,6 +238,15 @@ struct SongEditView: View {
     }
 
     // MARK: Aktionen
+
+    private func receiveTapped(_ pitches: [Int]) {
+        guard !pitches.isEmpty else { return }
+        if draft.pitches.isEmpty {
+            draft.pitches = Array(pitches.prefix(Song.maxPitches))
+        } else {
+            tappedPitches = pitches
+        }
+    }
 
     private func apply(_ midi: Int, to target: PickerTarget) {
         switch target {
