@@ -11,7 +11,7 @@ struct TestStore {
 
     init() throws {
         container = try ModelContainer(
-            for: Song.self, Concert.self, ConcertEntry.self,
+            for: Song.self, Concert.self, ConcertEntry.self, ScorePage.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }

@@ -6,6 +6,10 @@ struct SongDraft: Equatable {
     var title = ""
     var memo = ""
     var pitches: [Int] = []
+    /// Neu gescannte Seiten (JPEG), noch nicht gespeichert.
+    var newScans: [Data] = []
+    /// Bestehende Seiten, die beim Sichern gelöscht werden.
+    var removedPageIDs: Set<UUID> = []
 }
 
 struct SongEditView: View {
@@ -18,6 +22,7 @@ struct SongEditView: View {
 
     @State private var draft: SongDraft
     @State private var pickerTarget: PickerTarget?
+    @State private var showScanner = false
     @State private var errorMessage: String?
 
     static let memoLimit = 200
@@ -33,11 +38,18 @@ struct SongEditView: View {
         Song.validate(title: draft.title, pitches: draft.pitches)
     }
 
+    private var keptPages: [ScorePage] {
+        (song?.sortedScorePages ?? []).filter { !draft.removedPageIDs.contains($0.id) }
+    }
+
     var body: some View {
         Form {
             Section("Titel") {
                 TextField("Titel", text: $draft.title)
+                    .font(Theme.serif(.title3, weight: .semibold))
             }
+            .listRowBackground(Theme.card)
+
             Section("Notiz") {
                 TextField("z. B. Tenor beginnt", text: $draft.memo, axis: .vertical)
                     .onChange(of: draft.memo) { _, newValue in
@@ -46,55 +58,38 @@ struct SongEditView: View {
                         }
                     }
             }
-            Section {
-                ForEach(Array(draft.pitches.enumerated()), id: \.offset) { index, midi in
-                    Button {
-                        pickerTarget = .edit(index: index, midi: midi)
-                    } label: {
-                        Text(NoteName.name(midi: midi))
-                            .foregroundStyle(.primary)
-                    }
-                }
-                .onMove { draft.pitches.move(fromOffsets: $0, toOffset: $1) }
-                .onDelete { draft.pitches.remove(atOffsets: $0) }
+            .listRowBackground(Theme.card)
 
-                Button {
-                    pickerTarget = .add(midi: draft.pitches.last ?? Self.defaultPitch)
-                } label: {
-                    Label("Ton hinzufügen", systemImage: "plus")
-                }
-                .disabled(draft.pitches.count >= Song.maxPitches)
-            } header: {
-                HStack {
-                    Text("Töne")
-                    Spacer()
-                    PlayButton(pitches: draft.pitches, sourceID: "edit")
-                }
-            } footer: {
-                if let validationError {
-                    Text(validationError.message)
-                }
-            }
+            pitchSection
+            scoreSection
         }
+        .paperBackground()
         .navigationTitle(song == nil ? "Neues Lied" : "Lied bearbeiten")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if song == nil {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
-                }
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Abbrechen") { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Sichern", action: save)
+                    .fontWeight(.semibold)
                     .disabled(validationError != nil)
-            }
-            ToolbarItem(placement: .bottomBar) {
-                EditButton()
             }
         }
         .sheet(item: $pickerTarget) { target in
             PitchPicker(initialMidi: target.initialMidi) { midi in
                 apply(midi, to: target)
             }
+        }
+        .fullScreenCover(isPresented: $showScanner) {
+            DocumentScanner(
+                onFinish: { images in
+                    draft.newScans += images.compactMap(ImageCompressor.jpegData(from:))
+                    showScanner = false
+                },
+                onCancel: { showScanner = false }
+            )
+            .ignoresSafeArea()
         }
         .alert(
             "Fehler",
@@ -106,6 +101,108 @@ struct SongEditView: View {
         }
         .onDisappear { tonePlayer.stop() }
     }
+
+    // MARK: Abschnitte
+
+    private var pitchSection: some View {
+        Section {
+            ForEach(Array(draft.pitches.enumerated()), id: \.offset) { index, midi in
+                Button {
+                    pickerTarget = .edit(index: index, midi: midi)
+                } label: {
+                    HStack {
+                        Text("\(index + 1).")
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.gold)
+                        Text(NoteName.name(midi: midi))
+                            .font(.system(.body, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Spacer()
+                        Image(systemName: "pencil")
+                            .foregroundStyle(Theme.inkSecondary)
+                    }
+                }
+            }
+            .onMove { draft.pitches.move(fromOffsets: $0, toOffset: $1) }
+            .onDelete { draft.pitches.remove(atOffsets: $0) }
+
+            Button {
+                pickerTarget = .add(midi: draft.pitches.last ?? Self.defaultPitch)
+            } label: {
+                Label("Ton hinzufügen", systemImage: "plus.circle.fill")
+            }
+            .disabled(draft.pitches.count >= Song.maxPitches)
+        } header: {
+            HStack {
+                Text("Anfangstöne")
+                Spacer()
+                PlayButton(pitches: draft.pitches, sourceID: "edit")
+            }
+        } footer: {
+            if let validationError {
+                Text(validationError.message)
+            } else {
+                Text("Tippen zum Ändern, Wischen zum Löschen. Halten und ziehen zum Umsortieren.")
+            }
+        }
+        .listRowBackground(Theme.card)
+    }
+
+    private var scoreSection: some View {
+        Section {
+            if !keptPages.isEmpty || !draft.newScans.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(keptPages) { page in
+                            pageThumbnail(data: page.imageData) {
+                                draft.removedPageIDs.insert(page.id)
+                            }
+                        }
+                        ForEach(Array(draft.newScans.enumerated()), id: \.offset) { index, data in
+                            pageThumbnail(data: data) {
+                                draft.newScans.remove(at: index)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+            if DocumentScanner.isAvailable {
+                Button {
+                    showScanner = true
+                } label: {
+                    Label("Noten scannen", systemImage: "doc.viewfinder")
+                }
+            } else {
+                Text("Der Scanner ist auf diesem Gerät nicht verfügbar.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.inkSecondary)
+            }
+        } header: {
+            Text("Noten")
+        } footer: {
+            Text("Neue Seiten kommen ans Ende. Gespeichert wird erst mit „Sichern“.")
+        }
+        .listRowBackground(Theme.card)
+    }
+
+    private func pageThumbnail(data: Data, onDelete: @escaping () -> Void) -> some View {
+        ScoreThumbnail(data: data, height: 130)
+            .frame(width: 96)
+            .overlay(alignment: .topTrailing) {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Theme.bordeaux)
+                }
+                .buttonStyle(.borderless)
+                .offset(x: 6, y: -6)
+                .accessibilityLabel("Seite entfernen")
+            }
+    }
+
+    // MARK: Aktionen
 
     private func apply(_ midi: Int, to target: PickerTarget) {
         switch target {
@@ -122,12 +219,21 @@ struct SongEditView: View {
 
     private func save() {
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let target: Song
         if let song {
             song.title = title
             song.memo = draft.memo
             song.pitches = draft.pitches
+            target = song
         } else {
-            context.insert(Song(title: title, memo: draft.memo, pitches: draft.pitches))
+            target = Song(title: title, memo: draft.memo, pitches: draft.pitches)
+            context.insert(target)
+        }
+        for page in target.sortedScorePages where draft.removedPageIDs.contains(page.id) {
+            context.delete(page)
+        }
+        for data in draft.newScans {
+            target.addScorePage(data, in: context)
         }
         do {
             try context.save()

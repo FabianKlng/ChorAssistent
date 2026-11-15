@@ -19,15 +19,18 @@ struct SongListView: View {
         List {
             ForEach(filteredSongs) { song in
                 NavigationLink {
-                    SongEditView(song: song)
+                    SongDetailView(song: song)
                 } label: {
-                    SongRow(song: song)
+                    SongRowContent(song: song)
+                        .padding(.vertical, 4)
                 }
+                .listRowBackground(Theme.card)
             }
             .onDelete { offsets in
                 songToDelete = offsets.first.map { filteredSongs[$0] }
             }
         }
+        .paperBackground()
         .overlay {
             if songs.isEmpty {
                 ContentUnavailableView(
@@ -65,7 +68,8 @@ struct SongListView: View {
                 }
             }
         } message: { song in
-            Text("Es kommt in \(LibraryActions.concertCount(for: song)) Konzerten vor.")
+            let count = LibraryActions.concertCount(for: song)
+            Text("Es kommt in \(count) Konzerten vor. Auch die Noten werden gelöscht.")
         }
         .alert(
             "Fehler",
@@ -78,18 +82,34 @@ struct SongListView: View {
     }
 }
 
-private struct SongRow: View {
+/// Inhalt einer Liederzeile: Titel, Ton-Chips, Notiz, Hinweis auf Noten, Abspielknopf.
+struct SongRowContent: View {
     let song: Song
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
-                Text(NoteName.names(song.pitches))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(song.title)
+                        .font(Theme.serif(.headline, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    if !song.scorePages.isEmpty {
+                        Image(systemName: "doc.richtext")
+                            .font(.caption)
+                            .foregroundStyle(Theme.gold)
+                            .accessibilityLabel("Mit Noten")
+                    }
+                }
+                ToneChips(pitches: song.pitches)
+                if !song.memo.isEmpty {
+                    Text(song.memo)
+                        .font(.caption)
+                        .italic()
+                        .foregroundStyle(Theme.inkSecondary)
+                        .lineLimit(1)
+                }
             }
-            Spacer()
+            Spacer(minLength: 0)
             PlayButton(pitches: song.pitches, sourceID: song.id.uuidString)
         }
     }

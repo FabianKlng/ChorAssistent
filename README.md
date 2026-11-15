@@ -1,9 +1,15 @@
 # ChorAssistent
 
-iOS-App für eine Person, die im Chor die Anfangstöne angibt. Lieder werden mit
-ihren Anfangstönen gespeichert. Ein Tipp spielt die Töne nacheinander mit
-Klavierklang ab, auch bei eingeschaltetem Stummschalter. Der Konzertmodus geht
-eine feste Liedfolge mit drei großen Knöpfen durch.
+iOS-App für eine Person, die im Chor die Anfangstöne angibt.
+
+*   **Lieder:** Sie werden mit ihren Anfangstönen und gescannten Noten
+    gespeichert.
+*   **Abspielen:** Ein Tipp spielt die Töne nacheinander mit Klavierklang
+    ab, auch bei eingeschaltetem Stummschalter.
+*   **Startseite:** Sie zeigt das nächste Konzert.
+*   **Konzertmodus:** Er geht im dunklen Bühnen-Look eine feste Liedfolge
+    mit drei großen Knöpfen durch.
+*   **Gestaltung:** warm & klassisch, mit Notenpapier, Bordeaux und Gold.
 
 Das Design steht in [docs/designs/chor-assistent.md](docs/designs/chor-assistent.md).
 
@@ -13,7 +19,7 @@ erst durch GitHub Actions. Beim ersten Lauf sind Compilerfehler zu erwarten.
 ## Technik
 
 SwiftUI, SwiftData, AVFoundation (`AVAudioEngine` und `AVAudioUnitSampler`
-mit einer SoundFont), Swift Testing. iOS 17 oder neuer, nur iPhone. Keine
+mit einer SoundFont), VisionKit (Dokumentenscanner), Swift Testing. iOS 17 oder neuer, nur iPhone. Keine
 Bibliotheken von Drittanbietern.
 
 Das Xcode-Projekt wird **nicht** eingecheckt. Es entsteht aus `project.yml`

@@ -47,6 +47,8 @@ struct PitchPicker: View {
                 .frame(width: 90)
             }
             .padding(.horizontal)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.paper)
             .navigationTitle(NoteName.name(midi: midi))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -23,22 +23,24 @@ struct SongPickerSheet: View {
                     try? context.save()
                 } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(song.title)
-                                .foregroundStyle(.primary)
-                            Text(NoteName.names(song.pitches))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.serif(.body, weight: .semibold))
+                                .foregroundStyle(Theme.ink)
+                            ToneChips(pitches: song.pitches)
                         }
                         Spacer()
                         let count = occurrences(of: song)
                         if count > 0 {
                             Text("×\(count)")
-                                .foregroundStyle(.secondary)
+                                .font(.headline)
+                                .foregroundStyle(Theme.gold)
                         }
                     }
                 }
+                .listRowBackground(Theme.card)
             }
+            .paperBackground()
             .searchable(text: $searchText, prompt: "Titel suchen")
             .navigationTitle("Lied hinzufügen")
             .navigationBarTitleDisplayMode(.inline)

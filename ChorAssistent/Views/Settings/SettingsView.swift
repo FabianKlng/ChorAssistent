@@ -25,6 +25,7 @@ struct SettingsView: View {
             backupSection
             infoSection
         }
+        .paperBackground()
         .navigationTitle("Einstellungen")
         .onAppear { hasSafetyBackup = BackupService.hasSafetyBackup() }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
@@ -88,6 +89,7 @@ struct SettingsView: View {
                 Label("Hörprobe", systemImage: "play.fill")
             }
         }
+        .listRowBackground(Theme.card)
     }
 
     private var backupSection: some View {
@@ -116,8 +118,11 @@ struct SettingsView: View {
         } header: {
             Text("Sicherung")
         } footer: {
-            Text("Ein Import ersetzt die gesamte Bibliothek. Vorher wird automatisch eine Sicherung angelegt.")
+            Text(
+                "Die Sicherung enthält alle Lieder, Konzerte und Noten. Ein Import ersetzt die gesamte Bibliothek; "
+                    + "vorher wird automatisch eine Sicherung angelegt.")
         }
+        .listRowBackground(Theme.card)
     }
 
     private var infoSection: some View {
@@ -127,6 +132,7 @@ struct SettingsView: View {
                 LicensesView()
             }
         }
+        .listRowBackground(Theme.card)
     }
 
     // MARK: Aktionen
@@ -196,6 +202,7 @@ private struct LicensesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
         }
+        .background(Theme.paper)
         .navigationTitle("Lizenzen")
     }
 }

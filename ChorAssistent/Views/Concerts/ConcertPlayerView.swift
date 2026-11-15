@@ -1,7 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Vollbild-Konzertmodus: drei große Knöpfe, keine Wischgesten.
+/// Vollbild-Konzertmodus im Bühnen-Look: dunkel, goldener Abspielknopf,
+/// drei große Bedienelemente, keine Wischgesten.
 struct ConcertPlayerView: View {
     let concert: Concert
 
@@ -22,54 +23,73 @@ struct ConcertPlayerView: View {
         let next = entries.indices.contains(index + 1) ? entries[index + 1].song : nil
 
         GeometryReader { geometry in
-            VStack(spacing: 16) {
+            VStack(spacing: 18) {
                 header(index: index, count: entries.count)
 
                 if routeMonitor.isVolumeLow {
                     Label("Lautstärke niedrig", systemImage: "speaker.wave.1.fill")
                         .font(.headline)
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Theme.stage)
                         .frame(maxWidth: .infinity)
-                        .padding(8)
-                        .background(.yellow, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(10)
+                        .background(Theme.stageGold, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 
-                VStack(spacing: 8) {
+                VStack(spacing: 12) {
                     Text(current?.title ?? "")
-                        .font(.largeTitle.bold())
+                        .font(Theme.serif(.largeTitle, weight: .bold))
+                        .foregroundStyle(Theme.stageText)
                         .multilineTextAlignment(.center)
-                    Text(NoteName.names(current?.pitches ?? []))
-                        .font(.title)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(3)
+                        .id(index)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    ToneChips(pitches: current?.pitches ?? [], style: .stage)
                     if let memo = current?.memo, !memo.isEmpty {
                         Text(memo)
-                            .font(.body)
-                            .foregroundStyle(.secondary)
+                            .font(Theme.serif(.body))
+                            .italic()
+                            .foregroundStyle(Theme.stageSecondary)
                             .multilineTextAlignment(.center)
                     }
                 }
+                .frame(maxWidth: .infinity)
+                .animation(.easeInOut(duration: 0.25), value: index)
 
                 Spacer(minLength: 0)
 
-                PlayButton(pitches: current?.pitches ?? [], sourceID: "concert-\(index)", size: .large)
-                    .frame(maxHeight: geometry.size.height * 0.5)
+                PlayButton(pitches: current?.pitches ?? [], sourceID: "concert-\(index)", size: .stage)
+                    .frame(maxHeight: geometry.size.height * 0.42)
 
-                HStack(spacing: 16) {
+                HStack(spacing: 14) {
                     navigationButton("Zurück", systemImage: "chevron.left", target: index - 1, count: entries.count)
                     navigationButton("Weiter", systemImage: "chevron.right", target: index + 1, count: entries.count)
                 }
 
                 Text(next.map { "Als Nächstes: \($0.title)" } ?? "Letztes Lied")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.serif(.footnote))
+                    .foregroundStyle(Theme.stageSecondary)
             }
             .padding()
         }
+        .background {
+            ZStack {
+                Theme.stage
+                StaffLines()
+                    .stroke(Theme.stageGold.opacity(0.08), lineWidth: 1)
+                    .frame(height: 120)
+                    .offset(y: -140)
+            }
+            .ignoresSafeArea()
+        }
+        .preferredColorScheme(.dark)
+        .tint(Theme.stageGold)
         .audioErrorBanner()
         .confirmationDialog("Konzertmodus beenden?", isPresented: $confirmExit, titleVisibility: .visible) {
             Button("Beenden", role: .destructive) { dismiss() }
         }
         .sheet(isPresented: $showJumpList) {
-            jumpList(entries: entries)
+            jumpList(entries: entries, currentIndex: index)
         }
         // Die einzige Stelle, die die Bildschirmsperre steuert.
         .onChange(of: scenePhase, initial: true) { _, phase in
@@ -86,48 +106,75 @@ struct ConcertPlayerView: View {
     private func header(index: Int, count: Int) -> some View {
         HStack {
             Button("Beenden") { confirmExit = true }
+                .foregroundStyle(Theme.stageSecondary)
             Spacer()
             Button {
                 showJumpList = true
             } label: {
-                Text("Lied \(index + 1) von \(count)")
-                    .font(.headline)
+                HStack(spacing: 4) {
+                    Text("Lied \(index + 1) von \(count)")
+                    Image(systemName: "chevron.down")
+                        .font(.caption.bold())
+                }
+                .font(Theme.serif(.headline, weight: .semibold))
+                .foregroundStyle(Theme.stageGold)
             }
             Spacer()
-            Label(routeMonitor.outputName, systemImage: "speaker.wave.2")
+            Label(routeMonitor.outputName, systemImage: "speaker.wave.2.fill")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.stageSecondary)
+                .labelStyle(.iconOnly)
+                .accessibilityLabel("Ausgabe: \(routeMonitor.outputName)")
         }
     }
 
     private func navigationButton(_ title: String, systemImage: String, target: Int, count: Int) -> some View {
-        Button {
+        let enabled = target >= 0 && target < count
+        return Button {
             go(to: target, count: count)
         } label: {
             Label(title, systemImage: systemImage)
-                .font(.title2)
+                .font(Theme.serif(.title3, weight: .semibold))
+                .foregroundStyle(Theme.stageText)
                 .frame(maxWidth: .infinity, minHeight: 80)
+                .background(Theme.stageCard, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Theme.stageGold.opacity(0.25), lineWidth: 1)
+                )
         }
-        .buttonStyle(.bordered)
-        .disabled(target < 0 || target >= count)
+        .buttonStyle(PressableStyle())
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
     }
 
-    private func jumpList(entries: [ConcertEntry]) -> some View {
+    private func jumpList(entries: [ConcertEntry], currentIndex: Int) -> some View {
         NavigationStack {
             List(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 Button {
                     go(to: index, count: entries.count)
                     showJumpList = false
                 } label: {
-                    HStack {
-                        Text("\(index + 1).")
+                    HStack(spacing: 12) {
+                        Text("\(index + 1)")
+                            .font(Theme.serif(.headline, weight: .bold))
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.stageGold)
+                            .frame(width: 28)
                         Text(entry.song?.title ?? "")
-                            .foregroundStyle(.primary)
+                            .font(Theme.serif(.body))
+                            .foregroundStyle(Theme.stageText)
+                        Spacer()
+                        if index == currentIndex {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .foregroundStyle(Theme.stageGold)
+                        }
                     }
                 }
+                .listRowBackground(Theme.stageCard)
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.stage)
             .navigationTitle("Zu Lied springen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -136,11 +183,14 @@ struct ConcertPlayerView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
     }
 
     private func go(to target: Int, count: Int) {
         guard target >= 0, target < count else { return }
         tonePlayer.stop()
-        currentIndex = target
+        withAnimation {
+            currentIndex = target
+        }
     }
 }

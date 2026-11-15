@@ -11,13 +11,14 @@ struct ChorAssistentApp: App {
 
     init() {
         PlaybackSettings.registerDefaults()
+        Theme.applyAppearance()
 
         let player = TonePlayer()
         player.setUp()
         _tonePlayer = State(initialValue: player)
 
         containerResult = Result {
-            try ModelContainer(for: Song.self, Concert.self, ConcertEntry.self)
+            try ModelContainer(for: Song.self, Concert.self, ConcertEntry.self, ScorePage.self)
         }
         signatureExpiry = ProvisioningInfo.expirationDate()
     }

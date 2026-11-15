@@ -48,8 +48,8 @@ struct BackupServiceTests {
     }
 
     @Test func unknownVersion() throws {
-        let data = Data(#"{"formatVersion": 2}"#.utf8)
-        #expect(throws: BackupError.unknownVersion(2)) {
+        let data = Data(#"{"formatVersion": 9}"#.utf8)
+        #expect(throws: BackupError.unknownVersion(9)) {
             try BackupService.decodeAndValidate(data)
         }
     }
@@ -103,8 +103,8 @@ struct BackupServiceTests {
     @Test func tooLarge() throws {
         let url = temporaryFileURL()
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(count: BackupService.maxFileSize + 1).write(to: url)
-        #expect(throws: BackupError.tooLarge) { try BackupService.load(from: url) }
+        try Data(count: 1_001).write(to: url)
+        #expect(throws: BackupError.tooLarge) { try BackupService.load(from: url, maxSize: 1_000) }
     }
 
     @Test func settingsAreClamped() throws {
@@ -153,6 +153,61 @@ struct BackupServiceTests {
         let restored = try normalized(BackupService.makeFile(context: store.context, defaults: defaults))
         #expect(restored.songs.map(\.title) == ["Erster Import"])
         #expect(!BackupService.hasSafetyBackup(at: safetyURL))
+    }
+
+    // MARK: Version 2: Noten und Konzertdatum
+
+    @Test func scorePagesAndDateSurviveRoundTrip() throws {
+        let source = try TestStore()
+        let song = source.addSong("Mit Noten", [60, 64])
+        song.addScorePage(Data([0xFF, 0xD8, 0x01]), in: source.context)
+        song.addScorePage(Data([0xFF, 0xD8, 0x02]), in: source.context)
+        let concert = source.addConcert("Advent")
+        concert.date = Self.fixedDate
+        concert.append(song: song, in: source.context)
+        try source.context.save()
+
+        let exported = try normalized(BackupService.makeFile(context: source.context))
+        #expect(exported.formatVersion == 2)
+        #expect(exported.songs.first?.scorePages?.map(\.pageNumber) == [1, 2])
+
+        let target = try TestStore()
+        try BackupService.replaceLibrary(with: exported, context: target.context, defaults: makeTestDefaults())
+        let reimported = try normalized(BackupService.makeFile(context: target.context))
+        #expect(reimported.songs == exported.songs)
+        #expect(reimported.concerts.first?.date == Self.fixedDate)
+    }
+
+    @Test func versionOneFileIsStillReadable() throws {
+        let json = """
+            {
+              "formatVersion": 1,
+              "exportedAt": "2026-11-15T12:00:00Z",
+              "songs": [{"id": "6F1C2A47-1B6F-4E8B-9C1E-2B3A4C5D6E7F", "title": "Alt", "memo": "",
+                         "pitches": [60], "createdAt": "2026-11-15T12:00:00Z"}],
+              "concerts": [{"id": "0A1B2C3D-4E5F-4061-8728-394A5B6C7D8E", "name": "K",
+                            "createdAt": "2026-11-15T12:00:00Z",
+                            "songIDs": ["6F1C2A47-1B6F-4E8B-9C1E-2B3A4C5D6E7F"]}]
+            }
+            """
+        let file = try BackupService.decodeAndValidate(Data(json.utf8))
+        #expect(file.songs.first?.scorePages == nil)
+        #expect(file.concerts.first?.date == nil)
+
+        let store = try TestStore()
+        try BackupService.replaceLibrary(with: file, context: store.context, defaults: makeTestDefaults())
+        #expect(try counts(store).songs == 1)
+    }
+
+    @Test func deletingSongDeletesItsScorePages() throws {
+        let store = try TestStore()
+        let song = store.addSong("A")
+        song.addScorePage(Data([1]), in: store.context)
+        try store.context.save()
+        #expect(try store.context.fetchCount(FetchDescriptor<ScorePage>()) == 1)
+
+        try LibraryActions.delete(song: song, in: store.context)
+        #expect(try store.context.fetchCount(FetchDescriptor<ScorePage>()) == 0)
     }
 
     // MARK: Hilfen

@@ -13,7 +13,7 @@ enum BackupError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .tooLarge:
-            return "Datei größer als 5 MB"
+            return "Datei größer als 200 MB"
         case .unreadable:
             return "Datei nicht lesbar"
         case .unknownVersion(let version):
@@ -32,7 +32,8 @@ enum BackupError: LocalizedError, Equatable {
 
 @MainActor
 enum BackupService {
-    static let maxFileSize = 5_000_000
+    /// Mit Notenscans kann eine Sicherung groß werden.
+    static let maxFileSize = 200_000_000
 
     static var safetyBackupURL: URL {
         URL.documentsDirectory.appending(path: "Sicherung-vor-Import.json")
@@ -50,14 +51,24 @@ enum BackupService {
             formatVersion: BackupFile.currentVersion,
             exportedAt: now,
             settings: PlaybackSettings.current(defaults),
-            songs: songs.map {
-                SongDTO(id: $0.id, title: $0.title, memo: $0.memo, pitches: $0.pitches, createdAt: $0.createdAt)
+            songs: songs.map { song in
+                SongDTO(
+                    id: song.id,
+                    title: song.title,
+                    memo: song.memo,
+                    pitches: song.pitches,
+                    createdAt: song.createdAt,
+                    scorePages: song.sortedScorePages.map {
+                        ScorePageDTO(id: $0.id, pageNumber: $0.pageNumber, imageData: $0.imageData)
+                    }
+                )
             },
             concerts: concerts.map { concert in
                 ConcertDTO(
                     id: concert.id,
                     name: concert.name,
                     createdAt: concert.createdAt,
+                    date: concert.date,
                     songIDs: concert.orderedEntries.compactMap { $0.song?.id }
                 )
             }
@@ -82,13 +93,13 @@ enum BackupService {
 
     // MARK: Lesen und Prüfen
 
-    static func load(from url: URL) throws -> BackupFile {
+    static func load(from url: URL, maxSize: Int = maxFileSize) throws -> BackupFile {
         let scoped = url.startAccessingSecurityScopedResource()
         defer {
             if scoped { url.stopAccessingSecurityScopedResource() }
         }
         // Größe vor dem Lesen prüfen.
-        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > maxFileSize {
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > maxSize {
             throw BackupError.tooLarge
         }
         let data: Data
@@ -97,16 +108,16 @@ enum BackupService {
         } catch {
             throw BackupError.unreadable
         }
-        return try decodeAndValidate(data)
+        return try decodeAndValidate(data, maxSize: maxSize)
     }
 
-    static func decodeAndValidate(_ data: Data) throws -> BackupFile {
-        guard data.count <= maxFileSize else { throw BackupError.tooLarge }
+    static func decodeAndValidate(_ data: Data, maxSize: Int = maxFileSize) throws -> BackupFile {
+        guard data.count <= maxSize else { throw BackupError.tooLarge }
         let decoder = BackupFile.makeDecoder()
         guard let probe = try? decoder.decode(BackupVersionProbe.self, from: data) else {
             throw BackupError.unreadable
         }
-        guard probe.formatVersion == BackupFile.currentVersion else {
+        guard BackupFile.supportedVersions.contains(probe.formatVersion) else {
             throw BackupError.unknownVersion(probe.formatVersion)
         }
         guard let file = try? decoder.decode(BackupFile.self, from: data) else {
@@ -117,7 +128,7 @@ enum BackupService {
     }
 
     static func validate(_ file: BackupFile) throws {
-        guard file.formatVersion == BackupFile.currentVersion else {
+        guard BackupFile.supportedVersions.contains(file.formatVersion) else {
             throw BackupError.unknownVersion(file.formatVersion)
         }
         for song in file.songs {
@@ -167,9 +178,14 @@ enum BackupService {
                 )
                 context.insert(song)
                 songsByID[dto.id] = song
+                for pageDTO in (dto.scorePages ?? []).sorted(by: { $0.pageNumber < $1.pageNumber }) {
+                    let page = ScorePage(id: pageDTO.id, pageNumber: pageDTO.pageNumber, imageData: pageDTO.imageData)
+                    context.insert(page)
+                    page.song = song
+                }
             }
             for dto in file.concerts {
-                let concert = Concert(id: dto.id, name: dto.name, createdAt: dto.createdAt)
+                let concert = Concert(id: dto.id, name: dto.name, createdAt: dto.createdAt, date: dto.date)
                 context.insert(concert)
                 var created: [ConcertEntry] = []
                 for songID in dto.songIDs {

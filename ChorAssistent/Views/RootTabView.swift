@@ -7,6 +7,8 @@ struct RootTabView: View {
 
     var body: some View {
         TabView {
+            NavigationStack { HomeView() }
+                .tabItem { Label("Start", systemImage: "music.note.house") }
             NavigationStack { SongListView() }
                 .tabItem { Label("Lieder", systemImage: "music.note.list") }
             NavigationStack { ConcertListView() }
@@ -14,6 +16,7 @@ struct RootTabView: View {
             NavigationStack { SettingsView() }
                 .tabItem { Label("Einstellungen", systemImage: "gearshape") }
         }
+        .tint(Theme.bordeaux)
         .audioErrorBanner()
         .onAppear(perform: checkSignatureOnce)
         .alert(

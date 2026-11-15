@@ -1,8 +1,10 @@
 import Foundation
 
 /// Das Exportformat. Konzerte stehen darin als geordnete Liste von Lied-IDs.
+/// Version 2 ergänzt Notenseiten (JPEG, Base64) und das Konzertdatum; Version 1 bleibt lesbar.
 struct BackupFile: Codable, Equatable {
-    static let currentVersion = 1
+    static let currentVersion = 2
+    static let supportedVersions: Set<Int> = [1, 2]
 
     var formatVersion: Int
     var exportedAt: Date
@@ -31,12 +33,23 @@ struct SongDTO: Codable, Equatable {
     var memo: String
     var pitches: [Int]
     var createdAt: Date
+    /// Ab Version 2; fehlt in Version 1.
+    var scorePages: [ScorePageDTO]?
+}
+
+struct ScorePageDTO: Codable, Equatable {
+    var id: UUID
+    var pageNumber: Int
+    /// JPEG, im JSON als Base64.
+    var imageData: Data
 }
 
 struct ConcertDTO: Codable, Equatable {
     var id: UUID
     var name: String
     var createdAt: Date
+    /// Ab Version 2; fehlt in Version 1.
+    var date: Date?
     var songIDs: [UUID]
 }
 

@@ -37,6 +37,9 @@ final class Song {
     @Relationship(deleteRule: .cascade, inverse: \ConcertEntry.song)
     var entries: [ConcertEntry] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \ScorePage.song)
+    var scorePages: [ScorePage] = []
+
     init(id: UUID = UUID(), title: String, memo: String = "", pitches: [Int], createdAt: Date = .now) {
         self.id = id
         self.title = title

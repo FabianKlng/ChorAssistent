@@ -80,6 +80,18 @@ Töne abspielen.
     lässt sich rückgängig machen.
 *   **G8 – Mehrere Konzerte:** Es lassen sich beliebig viele Konzertlisten
     gleichzeitig speichern.
+*   **G10 – Noten scannen (ergänzt am 2026-11-15):** Zu jedem Lied lassen
+    sich Notenseiten mit dem Dokumentenscanner von iOS einscannen. Die Seiten
+    werden beim Lied gespeichert, auf der Detailseite als Vorschaubilder
+    gezeigt und lassen sich im Vollbild mit Zoom ansehen. Sie gehören zur
+    Sicherung (G7).
+*   **G11 – Gestaltung „warm & klassisch“ (ergänzt am 2026-11-15):**
+    *   Cremefarbener Papierhintergrund, Bordeaux und Gold, Titel in
+        Serifenschrift, eigener Dunkelmodus.
+    *   Der Konzertmodus ist immer dunkel („Bühne“).
+    *   Eine Startseite zeigt das nächste Konzert (Konzerte haben dafür ein
+        optionales Datum) und die zuletzt angelegten Lieder.
+    *   Eine Lied-Detailseite zeigt Töne, Abspielknopf, Notiz und Noten.
 *   **G9 – Ablaufanzeige der Signatur:** Die App wird mit einer kostenlosen
     Apple-ID installiert, die Signatur gilt 7 Tage. Die App zeigt die
     verbleibenden Tage beim App-Start und dauerhaft im Reiter „Konzerte". Bei
@@ -96,8 +108,12 @@ Töne abspielen.
 *   **Keine Mehrbenutzer-Funktion, kein Server, keine iCloud-Synchronisierung.**
     Sänger*innen haben keinen Zugriff auf die Daten.
 *   **Keine Android-, Web- oder Mac-Version.**
-*   **Keine Partituren, Liedtexte oder PDFs.** Die App speichert keine
-    Partituren und zeigt keine an.
+*   **Keine automatische Notenerkennung** (entschieden am 2026-11-15). Die
+    App liest keine Töne aus gescannten Noten. Auf dem Gerät gibt es dafür
+    keine brauchbare Lösung, und ein Cloud-Dienst wurde abgelehnt. Die
+    Anfangstöne werden immer von Hand eingegeben.
+*   **Keine Liedtexte, PDF-Importe oder Noten im Konzertmodus.** Gescannte
+    Noten sieht man auf der Lied-Detailseite, nicht auf der Bühne.
 *   **Kein Stimmgerät.** Die App hört nicht zu und misst nicht, ob der Chor
     richtig singt.
 *   **Kein einstellbarer Kammerton.** A4 ist immer 440 Hz.
@@ -473,6 +489,45 @@ Import rückgängig machen".
 | B/H oder b-Namen beim Übertragen verwechselt | Halbton falscher Anfangston | Doppel-Labels im Auswahlrad („Cis/Des", „B (= B♭)", „H (= B)"); Ton beim Auswählen anspielen |
 | Sicherheit: manipulierte oder sehr große Importdatei | Absturz oder unsinnige Daten | Vollständige Prüfung vor jeder Änderung, höchstens 5 MB. Die App verarbeitet keine personenbezogenen Daten und hat keinen Netzwerkzugriff |
 | Skalierung: große Bibliothek | Keine nennenswerte | Mehrere hundert Lieder sind unter 100 KB. 8 Töne pro Lied und der Bereich 36–84 decken übliche Chorlagen ab |
+
+### Erweiterung vom 2026-11-15: Design und Notenscans
+
+*   **Design-System:** `Design/Theme.swift` legt eine Palette aus
+    dynamischen Farben für hell und dunkel an. Dazu kommen Serifenschrift
+    und die Darstellung der Navigationsleisten. `Design/Components.swift`
+    enthält die Bausteine:
+    *   Karte und Abschnittstitel
+    *   Ton-Chips mit umbrechendem Layout
+    *   Notenlinien als Zierelement
+    *   Hinweis-Karte
+*   **Aufbau:** Die App hat vier Reiter: Start, Lieder, Konzerte und
+    Einstellungen.
+    *   Neu sind `HomeView` und `SongDetailView`.
+    *   Bearbeitet wird immer in einem Sheet.
+    *   `Concert.next(from:now:)` bestimmt das Konzert für die Startseite:
+        das früheste mit Datum ab heute, sonst das neueste ohne Datum.
+*   **Noten:** Neues Modell `ScorePage`. Es speichert `pageNumber` und
+    `imageData` als JPEG mit `@Attribute(.externalStorage)` und gehört zu
+    `Song.scorePages`. Wird das Lied gelöscht, werden die Seiten mit
+    gelöscht (`.cascade`).
+    *   Gescannt wird mit `VNDocumentCameraViewController` (VisionKit). Auf
+        dem Simulator ist er nicht verfügbar.
+    *   `ImageCompressor` verkleinert die längste Kante auf 2000 px und
+        speichert als JPEG mit Qualität 0,7.
+    *   Neue Seiten kommen ans Ende. Umsortieren gibt es nicht, deshalb
+        braucht es kein Durchnummerieren.
+    *   Angesehen werden die Seiten in `ScoreViewer`: Seiten blättern,
+        Pinch-Zoom bis 5×, Doppeltipp schaltet den Zoom um.
+    *   Für die Kamera ist `NSCameraUsageDescription` in `project.yml`
+        eingetragen.
+*   **Sicherung, Format 2:** Lieder enthalten `scorePages` (Base64),
+    Konzerte enthalten `date`.
+    *   Dateien im Format 1 bleiben lesbar.
+    *   Die Importgrenze steigt von 5 MB auf 200 MB.
+    *   Ohne die Scans wäre eine Sicherung bei Geräteverlust unvollständig.
+*   **App-Symbol:** Bordeaux mit goldenen Notenlinien und einer
+    cremefarbenen Achtelnote. Es liegt in
+    `ChorAssistent/Assets.xcassets/AppIcon.appiconset`.
 
 ## Alternatives Considered
 

@@ -6,18 +6,35 @@ final class Concert {
     var id: UUID
     var name: String
     var createdAt: Date
+    /// Optionales Datum des Auftritts; bestimmt das „nächste Konzert".
+    var date: Date?
 
     @Relationship(deleteRule: .cascade, inverse: \ConcertEntry.concert)
     var entries: [ConcertEntry] = []
 
-    init(id: UUID = UUID(), name: String, createdAt: Date = .now) {
+    init(id: UUID = UUID(), name: String, createdAt: Date = .now, date: Date? = nil) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
+        self.date = date
     }
 }
 
 extension Concert {
+    /// Das Konzert für die Startseite: das nächste mit Datum ab heute,
+    /// sonst das zuletzt angelegte ohne Datum, sonst keins.
+    static func next(from concerts: [Concert], now: Date, calendar: Calendar = .current) -> Concert? {
+        let today = calendar.startOfDay(for: now)
+        let upcoming = concerts.compactMap { concert -> (Concert, Date)? in
+            guard let date = concert.date, date >= today else { return nil }
+            return (concert, date)
+        }
+        if let first = upcoming.min(by: { $0.1 < $1.1 }) {
+            return first.0
+        }
+        return concerts.filter { $0.date == nil }.max { $0.createdAt < $1.createdAt }
+    }
+
     /// Die gültige Liedfolge: ohne gelöschte Einträge und ohne Einträge ohne Lied,
     /// sortiert nach Position und bei Gleichstand nach ID (stabil).
     var orderedEntries: [ConcertEntry] {
